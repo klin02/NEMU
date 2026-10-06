@@ -155,16 +155,18 @@ static void update_instr_cnt() {
 #endif // CONFIG_ENABLE_INSTR_CNT
 }
 
-static inline void update_instr_cnt_after_execute() {
+static inline void update_instr_cnt_after_execute(bool fast) {
 #if defined(CONFIG_SHARE) && !defined(CONFIG_LIGHTQS) && \
     defined(CONFIG_INSTR_CNT_BY_INSTR)
-  if (!ref_is_fast()) {
+  if (!fast) {
     // The single-step shared path has no generic batch delta left to settle.
     n_batch = 0;
     n_remain = 0;
     n_remain_total = 0;
     return;
   }
+#else
+  (void)fast;
 #endif
   update_instr_cnt();
 }
@@ -879,8 +881,12 @@ static void update_global(int cause) {
 
 /* Simulate how the CPU works. */
 void cpu_exec(uint64_t n) {
+  // The caller selects the mode between execution requests, never mid-call.
+  const bool fast = ref_is_fast();
+  // execute() uses a signed int counter; larger requests span internal batches.
+  const uint64_t batch_limit = fast ? (uint64_t)INT_MAX : BATCH_SIZE;
   #if !defined(CONFIG_LIGHTQS) && defined(CONFIG_SHARE)
-    assert(ref_is_fast() || n <= 1);
+    assert(fast || n <= 1);
   #endif
   g_print_step = ISNDEF(CONFIG_SHARE) && (n < MAX_INSTR_TO_PRINT);
   switch (nemu_state.state) {
@@ -1013,12 +1019,11 @@ void cpu_exec(uint64_t n) {
       }
     }
 
-    uint64_t batch_limit = ref_is_fast() ? (uint64_t)INT_MAX : BATCH_SIZE;
     n_batch = MIN_OF(n_remain_total, batch_limit);
     execute(n_batch);
 
     // settle instruction counting, as BATCH has ended.
-    update_instr_cnt_after_execute();
+    update_instr_cnt_after_execute(fast);
 
     IFDEF(CONFIG_PERF_OPT, update_global(0));
 

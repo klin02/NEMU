@@ -188,11 +188,14 @@ bool difftest_raise_critical_error() {
 #endif
 
 void difftest_exec(uint64_t n) {
-  if (!ref_is_fast() && n > 1) {
-    while (n-- != 0) cpu_exec(1);
+  // FAST advances continuously; state copies remain explicit caller requests.
+  if (ref_is_fast() || n <= 1) {
+    cpu_exec(n);
     return;
   }
-  cpu_exec(n);
+
+  // Preserve the existing single-step execution path for SLOW and other REFs.
+  while (n-- != 0) cpu_exec(1);
 }
 
 #ifdef CONFIG_REF_STATUS
