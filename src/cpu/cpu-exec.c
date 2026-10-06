@@ -23,6 +23,7 @@
 #include <memory/host-tlb.h>
 #include <isa-all-instr.h>
 #include <locale.h>
+#include <limits.h>
 #include <setjmp.h>
 #include <unistd.h>
 #include <generated/autoconf.h>
@@ -41,7 +42,7 @@
  * You can modify this value as you want.
  */
 #define MAX_INSTR_TO_PRINT 10
-#ifndef CONFIG_SHARE
+#if !defined(CONFIG_SHARE) || defined(CONFIG_SHARE_BATCH_EXEC)
 #define BATCH_SIZE 65536
 #else
 #define BATCH_SIZE 1
@@ -156,7 +157,7 @@ static void update_instr_cnt() {
 
 static inline void update_instr_cnt_after_execute() {
 #if defined(CONFIG_SHARE) && !defined(CONFIG_LIGHTQS) && \
-    defined(CONFIG_INSTR_CNT_BY_INSTR)
+    !defined(CONFIG_SHARE_BATCH_EXEC) && defined(CONFIG_INSTR_CNT_BY_INSTR)
   // Non-LightQS shared execution asserts that at most one instruction is
   // requested, so the completed batch has no generic delta left to compute.
   n_batch = 0;
@@ -336,7 +337,12 @@ static inline Decode *jr_fetch(Decode *s, vaddr_t target) {
   return tcache_jr_fetch(s, target);
 }
 
-static inline void debug_difftest(Decode *_this, Decode *next) {
+static inline void debug_difftest(Decode *_this, Decode *next, bool trace_enabled) {
+#ifdef CONFIG_SHARE
+  if (trace_enabled) {
+    ref_log_cpu("pc = 0x%lx inst %x", _this->pc, _this->isa.instr.val);
+  }
+#endif
   IFDEF(CONFIG_IQUEUE, iqueue_commit(_this->pc, (void *)&_this->isa.instr.val,
                                      _this->snpc - _this->pc));
   IFDEF(CONFIG_DEBUG, debug_hook(_this->pc, _this->logbuf));
@@ -418,6 +424,7 @@ uint64_t per_bb_profile(Decode *prev_s, Decode *s) {
 
 static void execute(int n) {
   Logtb("execute() Will execute %i instrs\n", n);
+  const bool trace_enabled = MUXDEF(CONFIG_SHARE, dynamic_config.debug_difftest, false);
   n_remain = n;
   // Note: n_remain in PERF_OPT execute may be less than 0, as it is only computed at end of basic block.
   // Note: n is no longer used below, use n_remain instead.
@@ -434,20 +441,36 @@ static void execute(int n) {
     g_exec_table = local_exec_table;
     extern Decode *tcache_init(const void *exec_nemu_decode, vaddr_t reset_vector);
     s = tcache_init(&&exec_nemu_decode, cpu.pc);
-    IFDEF(CONFIG_MODE_SYSTEM, hosttlb_init());
+#if defined(CONFIG_MODE_SYSTEM) && !defined(CONFIG_SHARE)
+    hosttlb_init();
+#endif
     init_flag = 1;
   }
+#ifdef CONFIG_SHARE
+  else if (unlikely(s->pc != cpu.pc || (g_sys_state_flag & SYS_STATE_FLUSH_TCACHE))) {
+    s = tcache_handle_flush(cpu.pc);
+    g_sys_state_flag &= ~SYS_STATE_FLUSH_TCACHE;
+  }
+#endif
 
   __attribute__((unused)) Decode *this_s = NULL;
   __attribute__((unused)) bool profile_control_exit = false;
 #ifndef CONFIG_SHARE
   const bool per_bb_profile_active =
     profiling_state != NoProfiling || checkpoint_state != NoCheckpoint;
+#else
+  const bool per_bb_profile_active = false;
 #endif
 
   // main loop
   while (true) {
-#if defined(CONFIG_DEBUG) || defined(CONFIG_DIFFTEST) || defined(CONFIG_IQUEUE) || defined(CONFIG_INSTR_CNT_BY_CATEGORY)
+#ifdef CONFIG_SHARE
+    cpu.amo = false;
+    cpu.pbmt = 0;
+    cpu.debug.current_pc = s->pc;
+    cpu.pc = s->snpc;
+#endif
+#if defined(CONFIG_DEBUG) || defined(CONFIG_DIFFTEST) || defined(CONFIG_IQUEUE) || defined(CONFIG_INSTR_CNT_BY_CATEGORY) || defined(CONFIG_SHARE)
     this_s = s;
 #endif
     __attribute__((unused)) rtlreg_t ls0, ls1, ls2;
@@ -487,6 +510,7 @@ static void execute(int n) {
     // Exit the execute() loop after certain basic blocks, even if instr count is disabled.
     IFDEF(CONFIG_INSTR_CNT_DISABLED, n_remain -= 1);
 
+#ifndef CONFIG_SHARE
     if (unlikely(per_bb_profile_active)) {
       uint64_t abs_inst_count = per_bb_profile(prev_s, s);
       Logtb("prev pc = 0x%lx, pc = 0x%lx", prev_s->pc, s->pc);
@@ -498,6 +522,7 @@ static void execute(int n) {
           unlikely(manual_cpt_quit), manual_cpt_quit);
     }
 
+#endif
     if (unlikely(n_remain <= 0)) {
       /* The old is_ctrl flag remained set until end_of_loop, publishing this
        * boundary twice when a control-flow BB exhausted the execute batch. */
@@ -523,7 +548,10 @@ static void execute(int n) {
     IFDEF(CONFIG_INSTR_CNT_BY_INSTR, n_remain -= 1);
 
     save_globals(s);
-    debug_difftest(this_s, s);
+    debug_difftest(this_s, s, trace_enabled);
+#if defined(CONFIG_SHARE) && defined(CONFIG_INSTR_CNT_BY_INSTR)
+    if (unlikely(n_remain <= 0)) return;
+#endif
   }
 
 end_of_loop:
@@ -542,16 +570,18 @@ end_of_loop:
   Logti("end_of_loop: prev pc = 0x%lx, pc = 0x%lx", prev_s->pc, s->pc);
   Loge("total insts: %'lu, execute remain: %'d", get_abs_instr_count(), n_remain);
 
+#ifndef CONFIG_SHARE
   if (profile_control_exit && unlikely(per_bb_profile_active)) {
     per_bb_profile(prev_s, s);
   }
+#endif
 
   if (unlikely(per_bb_profile_active && manual_cpt_quit)) {
     Log("unlikely(manual_cpt_quit)=%ld, manual_cpt_quit=%d",
         unlikely(manual_cpt_quit), manual_cpt_quit);
   }
 
-  debug_difftest(this_s, s);
+  debug_difftest(this_s, s, trace_enabled);
   save_globals(s);
 }
 #else // CONFIG_PERF_OPT
@@ -837,15 +867,19 @@ void fetch_decode(Decode *s, vaddr_t pc) {
 }
 
 #ifdef CONFIG_PERF_OPT
-static void update_global() {
+static void update_global(int cause) {
+  (void)cause;
+#ifdef CONFIG_SHARE
+  if (cause == NEMU_EXEC_END) return;
+#endif
   cpu.pc = prev_s->pc;
 }
 #endif
 
 /* Simulate how the CPU works. */
 void cpu_exec(uint64_t n) {
-  #ifndef CONFIG_LIGHTQS
-    IFDEF(CONFIG_SHARE, assert(n <= 1));
+  #if !defined(CONFIG_LIGHTQS) && defined(CONFIG_SHARE) && !defined(CONFIG_SHARE_BATCH_EXEC)
+    assert(n <= 1);
   #endif
   g_print_step = ISNDEF(CONFIG_SHARE) && (n < MAX_INSTR_TO_PRINT);
   switch (nemu_state.state) {
@@ -884,7 +918,7 @@ void cpu_exec(uint64_t n) {
     // settle instruction counting, as BATCH has ended.
     update_instr_cnt();
 
-    IFDEF(CONFIG_PERF_OPT, update_global());
+    IFDEF(CONFIG_PERF_OPT, update_global(cause));
 
     Loge("Longjmp happened. total insts: %'lu, cpu_exec remain: %'li", get_abs_instr_count(), n_remain_total);
   }
@@ -978,13 +1012,17 @@ void cpu_exec(uint64_t n) {
       }
     }
 
+#ifdef CONFIG_SHARE_DYNAMIC_BATCH
+    n_batch = MIN_OF(n_remain_total, (uint64_t)INT_MAX);
+#else
     n_batch = MIN_OF(n_remain_total, BATCH_SIZE);
+#endif
     execute(n_batch);
 
     // settle instruction counting, as BATCH has ended.
     update_instr_cnt_after_execute();
 
-    IFDEF(CONFIG_PERF_OPT, update_global());
+    IFDEF(CONFIG_PERF_OPT, update_global(0));
 
     Loge("total insts: %'lu, cpu_exec remain: %'li", get_abs_instr_count(), n_remain_total);
   }

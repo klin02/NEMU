@@ -441,6 +441,16 @@ config SHARE_CTRL
 endchoice
 
 
+config SHARE_BATCH_EXEC
+  depends on SHARE_REF && !LIGHTQS && !RV_AME
+  bool "Allow exact multi-instruction execution in shared reference"
+  default n
+
+config SHARE_DYNAMIC_BATCH
+  depends on SHARE_BATCH_EXEC
+  bool "Execute shared reference requests in one bounded batch"
+  default n
+
 config DIFFTEST_STORE_COMMIT
   depends on SHARE
   bool "Maintain a committed store queue for processor ref"
@@ -544,9 +554,10 @@ config RT_CHECK
   default y
 
 config PERF_OPT
-  depends on !SHARE
+  depends on !SHARE || (SHARE_REF && !LIGHTQS)
   bool "Performance optimization"
-  default y
+  default y if !SHARE
+  default n
 
 if PERF_OPT
 config TCACHE_SIZE
@@ -565,6 +576,7 @@ endif
 
 choice
   prompt "Instruction counting accuracy"
+  default INSTR_CNT_BY_INSTR_PERF_OPT if PERF_OPT && SHARE
   default INSTR_CNT_BY_BB if PERF_OPT
   default INSTR_CNT_BY_INSTR_NORMAL if !PERF_OPT
 
@@ -574,7 +586,7 @@ config INSTR_CNT_DISABLED
 
 config INSTR_CNT_BY_BB
   bool "By Basic Block (BB)"
-  depends on PERF_OPT
+  depends on PERF_OPT && !SHARE
 
 config INSTR_CNT_BY_INSTR_PERF_OPT
   bool "By Instruction"

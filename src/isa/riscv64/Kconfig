@@ -482,13 +482,13 @@ config PMP_GRANULARITY
   int "PMP granularity"
   default 12
 
-comment "PMP Check Disabled when enabling PERF_OPT"
-  depends on PERF_OPT
+comment "PMP Check Disabled for standalone PERF_OPT"
+  depends on PERF_OPT && !SHARE
   depends on !RV_PMP_ENTRY_0
 
 config RV_PMP_CHECK
-  # todo: pmp check still not work when enable PERF_OPT
-  depends on !PERF_OPT
+  # Shared PERF_OPT uses paddr checks rather than the direct HostTLB.
+  depends on !PERF_OPT || SHARE_REF
   depends on !RV_PMP_ENTRY_0
   bool "Enable PMP Check"
   default y
@@ -560,12 +560,12 @@ config PMA_GRANULARITY
   int "PMA granularity"
   default 12
 
-comment "PMA Check Disabled when enabling PERF_OPT"
-  depends on PERF_OPT
+comment "PMA Check Disabled for standalone PERF_OPT"
+  depends on PERF_OPT && !SHARE
   depends on !RV_PMA_ENTRY_0
 
 config RV_PMA_CHECK
-  depends on !PERF_OPT
+  depends on !PERF_OPT || SHARE_REF
   depends on !RV_PMA_ENTRY_0
   bool "Enable PMA Check"
   default y
