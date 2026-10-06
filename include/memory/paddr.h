@@ -91,6 +91,7 @@ void set_pmem(bool pass_pmem_from_dut, uint8_t *_pmem);
 
 
 #ifdef CONFIG_STORE_LOG
+void pmem_record_store_effect(paddr_t addr, int len, word_t data);
 typedef struct {
 #ifdef CONFIG_LIGHTQS
   uint64_t inst_cnt;
@@ -99,6 +100,13 @@ typedef struct {
   word_t orig_data;
   // new value and write length makes no sense for restore
 } store_log_t;
+
+typedef struct {
+  uint64_t addr;
+  uint64_t data;
+  uint64_t mask;
+  uint64_t orig_data;
+} difftest_store_log_entry_t;
 #endif // CONFIG_STORE_LOG
 
 #ifdef CONFIG_DIFFTEST_STORE_COMMIT

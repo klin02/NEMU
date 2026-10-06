@@ -35,6 +35,9 @@
 unsigned long MEMORY_SIZE = CONFIG_MSIZE;
 
 extern Decode *prev_s;
+#ifdef CONFIG_DIFFTEST_STORE_COMMIT
+extern bool difftest_fast_store_commit_disabled;
+#endif
 
 #if defined(CONFIG_MULTICORE_DIFF) && defined(CONFIG_RVV)
 extern uint64_t vec_read_golden_mem_addr;
@@ -532,7 +535,9 @@ extern uint64_t g_nr_guest_instr;
 
 extern uint64_t stable_log_begin, spec_log_begin;
 
-void pmem_record_store(paddr_t addr) {
+void pmem_record_store_effect(paddr_t addr, int len, word_t data) {
+  (void)len;
+  (void)data;
   // align to 8 byte
   addr = (addr >> 3) << 3;
   uint64_t rdata = pmem_read(addr, 8);
@@ -567,16 +572,34 @@ void pmem_record_restore(uint64_t restore_inst_cnt) {
   }
 }
 #else
-void pmem_record_store(paddr_t addr) {
+void pmem_record_store_effect(paddr_t addr, int len, word_t data) {
   if(dynamic_config.enable_store_log) {
-    // align to 8 byte
-    addr = (addr >> 3) << 3;
-    uint64_t rdata = pmem_read(addr, 8);
-    store_log_t log = {
-      .addr = addr,
-      .orig_data = rdata
-    };
-    store_log_stack_push(log);
+    paddr_t aligned_addr[2] = {addr & ~0x7ull, (addr & ~0x7ull) + 8};
+    uint64_t effect_data[2] = {0, 0};
+    uint64_t effect_mask[2] = {0, 0};
+    int touched = 1;
+    for (int i = 0; i < len; ++i) {
+      int byte_offset = (addr & 0x7) + i;
+      int chunk = byte_offset >> 3;
+      int chunk_byte = byte_offset & 0x7;
+      touched = MAX_OF(touched, chunk + 1);
+      effect_data[chunk] |= ((data >> (i * 8)) & 0xffull) << (chunk_byte * 8);
+      effect_mask[chunk] |= 1ull << chunk_byte;
+    }
+    for (int i = 0; i < touched; ++i) {
+      store_log_t rollback = {
+        .addr = aligned_addr[i],
+        .orig_data = pmem_read(aligned_addr[i], 8)
+      };
+      store_log_stack_push(rollback);
+      difftest_store_log_entry_t effect = {
+        .addr = aligned_addr[i],
+        .data = effect_data[i],
+        .mask = effect_mask[i],
+        .orig_data = rollback.orig_data
+      };
+      if (len != 0) store_effect_log_push(effect);
+    }
   }
 }
 
@@ -592,6 +615,13 @@ void pmem_record_restore() {
 
 void pmem_record_reset() {
   store_log_stack_reset();
+  store_effect_log_reset();
+}
+
+// Keep the existing matrix rollback entry point; matrix effect digests are
+// not recorded by the scalar fast-reference extension.
+void pmem_record_store(paddr_t addr) {
+  pmem_record_store_effect(addr, 0, 0);
 }
 
 #endif // CONFIG_STORE_LOG
@@ -613,7 +643,7 @@ void paddr_write(paddr_t addr, int len, word_t data, int mode, vaddr_t vaddr) {
   if (likely(in_pmem(addr))) {
 #ifdef CONFIG_SHARE
 #ifdef CONFIG_STORE_LOG
-    pmem_record_store(addr);
+    pmem_record_store_effect(addr, len, data);
 #endif // CONFIG_STORE_LOG
     ref_log_cpu("paddr write addr:" FMT_PADDR ", data:%016lx, len:%d, mode:%d",
         addr, data, len, mode);
@@ -769,6 +799,7 @@ bool analysis_memory_isuse(uint64_t page) {
 
 void store_commit_queue_push(uint64_t addr, uint64_t data, int len,
                              int cross_page_store) {
+  if (difftest_fast_store_commit_disabled) return;
 
 #ifndef CONFIG_DIFFTEST_STORE_COMMIT_AMO
   if (cpu.amo) {
