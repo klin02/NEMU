@@ -36,13 +36,23 @@ Switch at a consumed boundary: pending committed-store queue contents must
 not be relied on afterward. A forked worker still needs the boundary refresh
 API before resuming, even if its requested mode already matches.
 
-Batch execution returns at instruction boundaries. Compare
+FAST batch execution returns at instruction boundaries. Compare
 `difftest_get_instr_count()` before and after `difftest_exec(n)` to obtain
 actual progress; the caller must handle a short request or zero progress
 at exceptions and stops. FAST internal batches are capped at INT_MAX because
 the interpreter batch counter is an int. Shared trace-cache state is refreshed
 when the external PC or cache-flush state changes. REF logging remains
 controlled by the existing runtime debug flag.
+
+FAST calls `cpu_exec(n)` once and executes the requested instructions
+continuously inside the interpreter. The per-instruction budget decrement
+provides an exact stopping boundary; it does not copy register state or call
+`regcpy`. Execution mode and the internal batch limit are selected once per
+`cpu_exec` call. SLOW retains its existing sequence of `cpu_exec(1)` calls.
+Use `difftest_regcpy` explicitly when a state snapshot is needed, for example
+at a batch endpoint, an architectural event or a fork boundary. Ordinary
+stretches can accumulate into one request; skip instructions and external
+events must still be applied at their exact positions.
 
 ## Boundary APIs
 
