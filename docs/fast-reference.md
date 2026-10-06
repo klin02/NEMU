@@ -12,26 +12,37 @@ make NEMU_HOME="$PWD" git_commit= riscv64-xs-fastref_defconfig
 make NEMU_HOME="$PWD" git_commit= -j8
 ```
 
-The opt-in XS configuration enables SHARE_BATCH_EXEC, SHARE_DYNAMIC_BATCH
-and PERF_OPT. Shared PERF_OPT uses exact per-instruction counts and retains
-the configuration's PMP/PMA checks. Direct host-pointer HostTLB is disabled
-for shared execution, so accesses continue through the checked physical
-memory path. Standalone configuration defaults are unchanged.
+The XS fastref configuration builds one shared reference that supports
+both FAST and SLOW, with PERF_OPT and STORE_LOG_HASH enabled. There are no
+batch-execution configuration switches: the execution count comes from
+`difftest_exec(n)`, and the runtime mode selects batching. Shared PERF_OPT
+uses exact per-instruction counts. Direct host-pointer HostTLB remains
+disabled for shared execution. The separate FAST S/U translation cache is
+not included here. Standalone configuration defaults are unchanged.
 
 The default runtime mode is SLOW. Select FAST explicitly with
-`difftest_set_exec_mode(DIFFTEST_EXEC_FAST)` in a batch-capable build. SLOW
-splits multi-instruction requests into existing one-instruction calls.
-FAST suppresses committed-store queue recording; switching modes resets
-that queue and SLOW restores recording. Switch at a consumed boundary:
-pending committed-store queue contents must not be relied on afterward.
+`difftest_set_exec_mode(DIFFTEST_EXEC_FAST)`. SLOW splits multi-instruction
+requests into existing one-instruction calls. FAST executes in batches,
+suppresses committed-store queue recording and bypasses PMP/PMA permission
+checks, including those used during page-table walks. PMP/PMA checks remain
+compiled according to the existing configuration and resume in SLOW.
+CSR updates, page-table semantics and other memory-access checks remain
+active. FAST is speculative: bypassing permissions can change access-fault
+behavior, and a slow checker must independently confirm every segment.
 
-Batch execution returns at architectural boundaries. Compare
+Mode queries use inline helpers. A mode transition resets the committed-store
+queue and refreshes MMU/PMP/PMA derived state and translation/trace caches.
+Switch at a consumed boundary: pending committed-store queue contents must
+not be relied on afterward. A forked worker still needs the boundary refresh
+API before resuming, even if its requested mode already matches.
+
+Batch execution returns at instruction boundaries. Compare
 `difftest_get_instr_count()` before and after `difftest_exec(n)` to obtain
-actual progress; the caller must handle a short request or zero progress.
-Dynamic batches are capped at INT_MAX because the interpreter batch counter
-is an int. Shared trace-cache state is refreshed when the external PC or
-cache-flush state changes. REF logging remains controlled by the existing
-runtime debug flag.
+actual progress; the caller must handle a short request or zero progress
+at exceptions and stops. FAST internal batches are capped at INT_MAX because
+the interpreter batch counter is an int. Shared trace-cache state is refreshed
+when the external PC or cache-flush state changes. REF logging remains
+controlled by the existing runtime debug flag.
 
 ## Boundary APIs
 
@@ -45,13 +56,17 @@ runtime debug flag.
 - `difftest_state_hash()` returns register-state and ordered scalar-store
   digests. Synchronize the architectural state through regcpy before hashing.
 
-Store effects are collected only with STORE_LOG compiled in and the existing
-dynamic enable_store_log flag enabled. A zero store count does not prove
-store-effect coverage. Digests do not compare all guest-memory bytes, and
-scalar store-effect tracking does not cover matrix stores. Existing matrix
-rollback logging retains its original entry point.
+STORE_LOG_HASH adds ordered scalar-store hashes on top of STORE_LOG.
+Collection requires both configuration options and the existing runtime
+`enable_store_log` flag. With STORE_LOG_HASH disabled, rollback logging still
+works and boundary hashes report zero store words/count. The checker must
+confirm hash collection is enabled before relying on those fields; a zero
+store count does not prove store-effect coverage. Hashes do not compare all
+guest-memory bytes and do not cover matrix stores. Existing matrix rollback
+logging retains its original entry point.
 
-Batch mode excludes LightQS and RV_AME configurations; shared PERF_OPT
-excludes LightQS and shared controller builds. Unsupported combinations
-must retain their established execution paths. The separate FAST S/U
-translation cache is not part of this change.
+FAST mode and STORE_LOG_HASH exclude LightQS and RV_AME configurations;
+shared PERF_OPT excludes LightQS and shared controller builds. Unsupported
+configurations retain their established execution paths and reject FAST
+mode selection. Neither enabling PERF_OPT nor using the fastref defconfig
+selects FAST automatically.

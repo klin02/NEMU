@@ -33,24 +33,16 @@ static inline void difftest_mark_csr_dirty(void) {
 
 unsigned ref_hartid = 0;
 
-static int difftest_exec_mode = DIFFTEST_EXEC_SLOW;
-#ifdef CONFIG_DIFFTEST_STORE_COMMIT
-bool difftest_fast_store_commit_disabled = false;
-#endif
+int difftest_exec_mode = DIFFTEST_EXEC_SLOW;
 
 void difftest_set_exec_mode(int mode) {
   assert(mode == DIFFTEST_EXEC_FAST || mode == DIFFTEST_EXEC_SLOW);
-#ifndef CONFIG_SHARE_BATCH_EXEC
-  assert(mode == DIFFTEST_EXEC_SLOW);
-#endif
-#ifdef CONFIG_DIFFTEST_STORE_COMMIT
-  bool disabled = mode == DIFFTEST_EXEC_FAST;
-  if (difftest_fast_store_commit_disabled != disabled) {
-    store_queue_reset();
-    difftest_fast_store_commit_disabled = disabled;
-  }
-#endif
+  assert(mode == DIFFTEST_EXEC_SLOW || ref_fast_supported());
+  if (difftest_exec_mode == mode) return;
+  IFDEF(CONFIG_DIFFTEST_STORE_COMMIT, store_queue_reset());
   difftest_exec_mode = mode;
+  // Mode changes also change permission checks; discard derived cache state.
+  difftest_flush_state();
 }
 
 extern void load_flash_contents(const char *flash_img);
@@ -210,7 +202,7 @@ bool difftest_raise_critical_error() {
 #endif
 
 void difftest_exec(uint64_t n) {
-  if (difftest_exec_mode == DIFFTEST_EXEC_SLOW && n > 1) {
+  if (!ref_is_fast() && n > 1) {
     while (n-- != 0) cpu_exec(1);
     return;
   }
@@ -581,8 +573,8 @@ void difftest_state_hash(void *dest) {
   hash->state_lo = 0x243f6a8885a308d3ull;
   hash->state_hi = 0x13198a2e03707344ull;
   state_hash_bytes(&hash->state_lo, &hash->state_hi, &cpu, DIFFTEST_REG_SIZE);
-#ifdef CONFIG_STORE_LOG
-  store_effect_log_hash(&hash->store_lo, &hash->store_hi, &hash->store_count);
+#ifdef CONFIG_STORE_LOG_HASH
+  store_log_hash(&hash->store_lo, &hash->store_hi, &hash->store_count);
 #else
   hash->store_lo = 0;
   hash->store_hi = 0;

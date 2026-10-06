@@ -35,9 +35,6 @@
 unsigned long MEMORY_SIZE = CONFIG_MSIZE;
 
 extern Decode *prev_s;
-#ifdef CONFIG_DIFFTEST_STORE_COMMIT
-extern bool difftest_fast_store_commit_disabled;
-#endif
 
 #if defined(CONFIG_MULTICORE_DIFF) && defined(CONFIG_RVV)
 extern uint64_t vec_read_golden_mem_addr;
@@ -575,30 +572,35 @@ void pmem_record_restore(uint64_t restore_inst_cnt) {
 void pmem_record_store_effect(paddr_t addr, int len, word_t data) {
   if(dynamic_config.enable_store_log) {
     paddr_t aligned_addr[2] = {addr & ~0x7ull, (addr & ~0x7ull) + 8};
+    int touched = (addr & 0x7) + len > 8 ? 2 : 1;
+#ifdef CONFIG_STORE_LOG_HASH
     uint64_t effect_data[2] = {0, 0};
     uint64_t effect_mask[2] = {0, 0};
-    int touched = 1;
     for (int i = 0; i < len; ++i) {
       int byte_offset = (addr & 0x7) + i;
       int chunk = byte_offset >> 3;
       int chunk_byte = byte_offset & 0x7;
-      touched = MAX_OF(touched, chunk + 1);
       effect_data[chunk] |= ((data >> (i * 8)) & 0xffull) << (chunk_byte * 8);
       effect_mask[chunk] |= 1ull << chunk_byte;
     }
+#else
+    (void)data;
+#endif
     for (int i = 0; i < touched; ++i) {
       store_log_t rollback = {
         .addr = aligned_addr[i],
         .orig_data = pmem_read(aligned_addr[i], 8)
       };
       store_log_stack_push(rollback);
-      difftest_store_log_entry_t effect = {
+#ifdef CONFIG_STORE_LOG_HASH
+      store_log_hash_entry_t effect = {
         .addr = aligned_addr[i],
         .data = effect_data[i],
         .mask = effect_mask[i],
         .orig_data = rollback.orig_data
       };
-      if (len != 0) store_effect_log_push(effect);
+      if (len != 0) store_log_hash_push(effect);
+#endif
     }
   }
 }
@@ -615,7 +617,7 @@ void pmem_record_restore() {
 
 void pmem_record_reset() {
   store_log_stack_reset();
-  store_effect_log_reset();
+  IFDEF(CONFIG_STORE_LOG_HASH, store_log_hash_reset());
 }
 
 // Keep the existing matrix rollback entry point; matrix effect digests are
@@ -799,7 +801,7 @@ bool analysis_memory_isuse(uint64_t page) {
 
 void store_commit_queue_push(uint64_t addr, uint64_t data, int len,
                              int cross_page_store) {
-  if (difftest_fast_store_commit_disabled) return;
+  if (ref_is_fast()) return;
 
 #ifndef CONFIG_DIFFTEST_STORE_COMMIT_AMO
   if (cpu.amo) {

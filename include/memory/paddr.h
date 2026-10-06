@@ -101,12 +101,14 @@ typedef struct {
   // new value and write length makes no sense for restore
 } store_log_t;
 
+#ifdef CONFIG_STORE_LOG_HASH
 typedef struct {
   uint64_t addr;
   uint64_t data;
   uint64_t mask;
   uint64_t orig_data;
-} difftest_store_log_entry_t;
+} store_log_hash_entry_t;
+#endif
 #endif // CONFIG_STORE_LOG
 
 #ifdef CONFIG_DIFFTEST_STORE_COMMIT

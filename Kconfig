@@ -441,16 +441,6 @@ config SHARE_CTRL
 endchoice
 
 
-config SHARE_BATCH_EXEC
-  depends on SHARE_REF && !LIGHTQS && !RV_AME
-  bool "Allow exact multi-instruction execution in shared reference"
-  default n
-
-config SHARE_DYNAMIC_BATCH
-  depends on SHARE_BATCH_EXEC
-  bool "Execute shared reference requests in one bounded batch"
-  default n
-
 config DIFFTEST_STORE_COMMIT
   depends on SHARE
   bool "Maintain a committed store queue for processor ref"

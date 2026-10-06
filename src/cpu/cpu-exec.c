@@ -42,7 +42,7 @@
  * You can modify this value as you want.
  */
 #define MAX_INSTR_TO_PRINT 10
-#if !defined(CONFIG_SHARE) || defined(CONFIG_SHARE_BATCH_EXEC)
+#ifndef CONFIG_SHARE
 #define BATCH_SIZE 65536
 #else
 #define BATCH_SIZE 1
@@ -157,15 +157,16 @@ static void update_instr_cnt() {
 
 static inline void update_instr_cnt_after_execute() {
 #if defined(CONFIG_SHARE) && !defined(CONFIG_LIGHTQS) && \
-    !defined(CONFIG_SHARE_BATCH_EXEC) && defined(CONFIG_INSTR_CNT_BY_INSTR)
-  // Non-LightQS shared execution asserts that at most one instruction is
-  // requested, so the completed batch has no generic delta left to compute.
-  n_batch = 0;
-  n_remain = 0;
-  n_remain_total = 0;
-#else
-  update_instr_cnt();
+    defined(CONFIG_INSTR_CNT_BY_INSTR)
+  if (!ref_is_fast()) {
+    // The single-step shared path has no generic batch delta left to settle.
+    n_batch = 0;
+    n_remain = 0;
+    n_remain_total = 0;
+    return;
+  }
 #endif
+  update_instr_cnt();
 }
 
 void monitor_statistic() {
@@ -878,8 +879,8 @@ static void update_global(int cause) {
 
 /* Simulate how the CPU works. */
 void cpu_exec(uint64_t n) {
-  #if !defined(CONFIG_LIGHTQS) && defined(CONFIG_SHARE) && !defined(CONFIG_SHARE_BATCH_EXEC)
-    assert(n <= 1);
+  #if !defined(CONFIG_LIGHTQS) && defined(CONFIG_SHARE)
+    assert(ref_is_fast() || n <= 1);
   #endif
   g_print_step = ISNDEF(CONFIG_SHARE) && (n < MAX_INSTR_TO_PRINT);
   switch (nemu_state.state) {
@@ -1012,11 +1013,8 @@ void cpu_exec(uint64_t n) {
       }
     }
 
-#ifdef CONFIG_SHARE_DYNAMIC_BATCH
-    n_batch = MIN_OF(n_remain_total, (uint64_t)INT_MAX);
-#else
-    n_batch = MIN_OF(n_remain_total, BATCH_SIZE);
-#endif
+    uint64_t batch_limit = ref_is_fast() ? (uint64_t)INT_MAX : BATCH_SIZE;
+    n_batch = MIN_OF(n_remain_total, batch_limit);
     execute(n_batch);
 
     // settle instruction counting, as BATCH has ended.
