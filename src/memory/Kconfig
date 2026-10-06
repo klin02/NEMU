@@ -17,6 +17,16 @@ config STORE_LOG
   bool "Enable store log"
   default n
 
+config STORE_LOG_HASH
+  bool "Hash ordered scalar store log effects for reference boundaries"
+  depends on STORE_LOG && SHARE_REF && !LIGHTQS && !RV_AME
+  default n
+  help
+    Record scalar store address, data, byte mask and original value for
+    ordered boundary hashes, in addition to the existing rollback log.
+    Collection also requires the runtime enable_store_log flag. Hashes
+    do not compare the complete guest memory or cover matrix stores.
+
 config STORE_LOG_SIZE
   int "The size of store log"
   depends on STORE_LOG
