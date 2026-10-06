@@ -41,6 +41,7 @@ static inline Decode* tcache_entry_init(Decode *s, vaddr_t pc) {
   s->tnext = s->ntnext = NULL;
   s->type = 0;
   s->pc = pc;
+  IFDEF(CONFIG_SHARE, s->snpc = pc);
   s->EHelper = g_exec_nemu_decode;
   return s;
 }
