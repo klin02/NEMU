@@ -93,7 +93,7 @@ static inline void debug_hook(vaddr_t pc, const char *asmbuf) {
 #endif
 
 
-void save_globals(Decode *s) { IFDEF(CONFIG_PERF_OPT, prev_s = s); }
+void save_globals(Decode *s) { IFDEF(CONFIG_PERF_OPT_CORE, prev_s = s); }
 
 // Get the number of executed instructions:
 // Two function is provided: get_abs_instr_count() and get_abs_instr_count_csr()
@@ -254,7 +254,7 @@ _Noreturn void longjmp_exception(int ex_cause) {
   }
 }
 
-#ifdef CONFIG_PERF_OPT
+#ifdef CONFIG_PERF_OPT_CORE
 static bool manual_cpt_quit = false;
 #define FILL_EXEC_TABLE(name) [concat(EXEC_ID_, name)] = &&concat(exec_, name),
 
@@ -341,7 +341,7 @@ static inline Decode *jr_fetch(Decode *s, vaddr_t target) {
 }
 
 static inline void debug_difftest(Decode *_this, Decode *next, bool trace_enabled) {
-#ifdef CONFIG_SHARE
+#ifdef CONFIG_PERF_OPT_SHARE
   if (trace_enabled) {
     ref_log_cpu("pc = 0x%lx inst %x", _this->pc, _this->isa.instr.val);
   }
@@ -354,7 +354,7 @@ static inline void debug_difftest(Decode *_this, Decode *next, bool trace_enable
   IFDEF(CONFIG_DIFFTEST, difftest_step(_this->pc, next->pc));
 }
 
-#ifndef CONFIG_SHARE
+#ifndef CONFIG_PERF_OPT_SHARE
 uint64_t per_bb_profile(Decode *prev_s, Decode *s) {
 
 
@@ -423,11 +423,11 @@ uint64_t per_bb_profile(Decode *prev_s, Decode *s) {
   }
   return abs_inst_count;
 }
-#endif // CONFIG_SHARE
+#endif // CONFIG_PERF_OPT_SHARE
 
 static void execute(int n) {
   Logtb("execute() Will execute %i instrs\n", n);
-  const bool trace_enabled = MUXDEF(CONFIG_SHARE, dynamic_config.debug_difftest, false);
+  const bool trace_enabled = MUXDEF(CONFIG_PERF_OPT_SHARE, dynamic_config.debug_difftest, false);
   n_remain = n;
   // Note: n_remain in PERF_OPT execute may be less than 0, as it is only computed at end of basic block.
   // Note: n is no longer used below, use n_remain instead.
@@ -444,12 +444,12 @@ static void execute(int n) {
     g_exec_table = local_exec_table;
     extern Decode *tcache_init(const void *exec_nemu_decode, vaddr_t reset_vector);
     s = tcache_init(&&exec_nemu_decode, cpu.pc);
-#if defined(CONFIG_MODE_SYSTEM) && !defined(CONFIG_SHARE)
+#if defined(CONFIG_MODE_SYSTEM) && defined(CONFIG_PERF_OPT)
     hosttlb_init();
 #endif
     init_flag = 1;
   }
-#ifdef CONFIG_SHARE
+#ifdef CONFIG_PERF_OPT_SHARE
   else if (unlikely(s->pc != cpu.pc || (g_sys_state_flag & SYS_STATE_FLUSH_TCACHE))) {
     s = tcache_handle_flush(cpu.pc);
     g_sys_state_flag &= ~SYS_STATE_FLUSH_TCACHE;
@@ -458,7 +458,7 @@ static void execute(int n) {
 
   __attribute__((unused)) Decode *this_s = NULL;
   __attribute__((unused)) bool profile_control_exit = false;
-#ifndef CONFIG_SHARE
+#ifndef CONFIG_PERF_OPT_SHARE
   const bool per_bb_profile_active =
     profiling_state != NoProfiling || checkpoint_state != NoCheckpoint;
 #else
@@ -467,13 +467,13 @@ static void execute(int n) {
 
   // main loop
   while (true) {
-#ifdef CONFIG_SHARE
+#ifdef CONFIG_PERF_OPT_SHARE
     cpu.amo = false;
     cpu.pbmt = 0;
     cpu.debug.current_pc = s->pc;
     cpu.pc = s->snpc;
 #endif
-#if defined(CONFIG_DEBUG) || defined(CONFIG_DIFFTEST) || defined(CONFIG_IQUEUE) || defined(CONFIG_INSTR_CNT_BY_CATEGORY) || defined(CONFIG_SHARE)
+#if defined(CONFIG_DEBUG) || defined(CONFIG_DIFFTEST) || defined(CONFIG_IQUEUE) || defined(CONFIG_INSTR_CNT_BY_CATEGORY) || defined(CONFIG_PERF_OPT_SHARE)
     this_s = s;
 #endif
     __attribute__((unused)) rtlreg_t ls0, ls1, ls2;
@@ -513,7 +513,7 @@ static void execute(int n) {
     // Exit the execute() loop after certain basic blocks, even if instr count is disabled.
     IFDEF(CONFIG_INSTR_CNT_DISABLED, n_remain -= 1);
 
-#ifndef CONFIG_SHARE
+#ifndef CONFIG_PERF_OPT_SHARE
     if (unlikely(per_bb_profile_active)) {
       uint64_t abs_inst_count = per_bb_profile(prev_s, s);
       Logtb("prev pc = 0x%lx, pc = 0x%lx", prev_s->pc, s->pc);
@@ -552,7 +552,7 @@ static void execute(int n) {
 
     save_globals(s);
     debug_difftest(this_s, s, trace_enabled);
-#if defined(CONFIG_SHARE) && defined(CONFIG_INSTR_CNT_BY_INSTR)
+#if defined(CONFIG_PERF_OPT_SHARE) && defined(CONFIG_INSTR_CNT_BY_INSTR)
     if (unlikely(n_remain <= 0)) return;
 #endif
   }
@@ -573,7 +573,7 @@ end_of_loop:
   Logti("end_of_loop: prev pc = 0x%lx, pc = 0x%lx", prev_s->pc, s->pc);
   Loge("total insts: %'lu, execute remain: %'d", get_abs_instr_count(), n_remain);
 
-#ifndef CONFIG_SHARE
+#ifndef CONFIG_PERF_OPT_SHARE
   if (profile_control_exit && unlikely(per_bb_profile_active)) {
     per_bb_profile(prev_s, s);
   }
@@ -587,7 +587,7 @@ end_of_loop:
   debug_difftest(this_s, s, trace_enabled);
   save_globals(s);
 }
-#else // CONFIG_PERF_OPT
+#else // CONFIG_PERF_OPT_CORE
 #define FILL_EXEC_TABLE(name) [concat(EXEC_ID_, name)] = concat(exec_, name),
 
 #define rtl_priv_next(s)
@@ -838,7 +838,7 @@ static void execute(int n) {
   }
   Loge("total insts: %'lu, execute remain: %'d", get_abs_instr_count(), n_remain);
 }
-#endif // CONFIG_PERF_OPT
+#endif // CONFIG_PERF_OPT_CORE
 
 IFDEF(CONFIG_DEBUG, char log_bytebuf[80] = {};)
 // max size is (strlen(str(instr)) + strlen(suffix_char(id_dest->width)) + sizeof(id_dest->str) + sizeof(id_src2->str) + sizeof(id_src1->str))
@@ -869,10 +869,10 @@ void fetch_decode(Decode *s, vaddr_t pc) {
   s->EHelper = g_exec_table[idx];
 }
 
-#ifdef CONFIG_PERF_OPT
+#ifdef CONFIG_PERF_OPT_CORE
 static void update_global(int cause) {
   (void)cause;
-#ifdef CONFIG_SHARE
+#ifdef CONFIG_PERF_OPT_SHARE
   if (cause == NEMU_EXEC_END) return;
 #endif
   cpu.pc = prev_s->pc;
@@ -925,7 +925,7 @@ void cpu_exec(uint64_t n) {
     // settle instruction counting, as BATCH has ended.
     update_instr_cnt();
 
-    IFDEF(CONFIG_PERF_OPT, update_global(cause));
+    IFDEF(CONFIG_PERF_OPT_CORE, update_global(cause));
 
     Loge("Longjmp happened. total insts: %'lu, cpu_exec remain: %'li", get_abs_instr_count(), n_remain_total);
   }
@@ -975,7 +975,7 @@ void cpu_exec(uint64_t n) {
 
       // No need to settle instruction counting here, as it is done in longjmp handler.
       // It's necessary to flush tcache for exception: addr space may conflict in different priv/mmu mode.
-      #ifdef CONFIG_PERF_OPT
+      #ifdef CONFIG_PERF_OPT_CORE
         tcache_handle_flush(cpu.pc);
       #else
         tcache_handle_flush();
@@ -1008,7 +1008,7 @@ void cpu_exec(uint64_t n) {
         // No need to update_instr_count(). This is not the end of BATCH.
 
         // It's necessary to flush tcache for interrupt: addr space may conflict in different priv/mmu mode.
-        #ifdef CONFIG_PERF_OPT
+        #ifdef CONFIG_PERF_OPT_CORE
           tcache_handle_flush(cpu.pc);
           #else
           tcache_handle_flush();
@@ -1025,7 +1025,7 @@ void cpu_exec(uint64_t n) {
     // settle instruction counting, as BATCH has ended.
     update_instr_cnt_after_execute(fast);
 
-    IFDEF(CONFIG_PERF_OPT, update_global(0));
+    IFDEF(CONFIG_PERF_OPT_CORE, update_global(0));
 
     Loge("total insts: %'lu, cpu_exec remain: %'li", get_abs_instr_count(), n_remain_total);
   }

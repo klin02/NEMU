@@ -62,8 +62,8 @@ typedef struct Decode {
   };
   vaddr_t pc;
   vaddr_t snpc; // sequential next pc
-  IFDEF (CONFIG_PERF_OPT, const void *EHelper);
-  IFNDEF(CONFIG_PERF_OPT, void (*EHelper)(struct Decode *));
+  IFDEF (CONFIG_PERF_OPT_CORE, const void *EHelper);
+  IFNDEF(CONFIG_PERF_OPT_CORE, void (*EHelper)(struct Decode *));
   Operand dest, src1, src2;
   #ifdef CONFIG_CUSTOM_TENSOR
   Operand src3;

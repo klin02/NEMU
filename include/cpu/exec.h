@@ -18,7 +18,7 @@
 
 #include <cpu/decode.h>
 
-#ifdef CONFIG_PERF_OPT
+#ifdef CONFIG_PERF_OPT_CORE
 #define finish_label exec_finish
 #define def_label(l) l:
 #define def_EHelper(name) \

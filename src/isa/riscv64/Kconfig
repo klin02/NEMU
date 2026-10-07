@@ -483,12 +483,12 @@ config PMP_GRANULARITY
   default 12
 
 comment "PMP Check Disabled for standalone PERF_OPT"
-  depends on PERF_OPT && !SHARE
+  depends on PERF_OPT
   depends on !RV_PMP_ENTRY_0
 
 config RV_PMP_CHECK
-  # Shared PERF_OPT uses paddr checks rather than the direct HostTLB.
-  depends on !PERF_OPT || SHARE_REF
+  # PERF_OPT_SHARE uses paddr checks rather than the direct HostTLB.
+  depends on !PERF_OPT
   depends on !RV_PMP_ENTRY_0
   bool "Enable PMP Check"
   default y
@@ -561,11 +561,11 @@ config PMA_GRANULARITY
   default 12
 
 comment "PMA Check Disabled for standalone PERF_OPT"
-  depends on PERF_OPT && !SHARE
+  depends on PERF_OPT
   depends on !RV_PMA_ENTRY_0
 
 config RV_PMA_CHECK
-  depends on !PERF_OPT || SHARE_REF
+  depends on !PERF_OPT
   depends on !RV_PMA_ENTRY_0
   bool "Enable PMA Check"
   default y
@@ -745,7 +745,7 @@ config MIMPID_VALUE
 config PMPTABLE_EXTENSION
   # PMPTable covers PMPChecker function,
   # close PMPChecker when using PMPTable.
-  depends on !PERF_OPT
+  depends on !PERF_OPT_CORE
   depends on !RV_PMP_CHECK
   depends on RV_PMP_CSR
   bool "Enable PMPTable extension"

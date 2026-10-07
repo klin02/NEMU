@@ -20,7 +20,7 @@
 #include <profiling/profiling_control.h>
 #include "../local-include/intr.h"
 
-#if defined(CONFIG_PERF_OPT) && !defined(CONFIG_SHARE)
+#ifdef CONFIG_PERF_OPT
 #define ENABLE_HOSTTLB 1
 #endif
 
