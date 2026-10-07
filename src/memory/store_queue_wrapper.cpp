@@ -1,10 +1,6 @@
 #include <memory/store_queue_wrapper.h>
-#include <algorithm>
 #include <queue>
 #include <stack>
-#ifdef CONFIG_STORE_LOG_HASH
-#include <vector>
-#endif
 
 #ifdef CONFIG_STORE_LOG
 std::stack<store_log_t> store_log_stack;
@@ -13,52 +9,6 @@ void store_log_stack_push(store_log_t log) { store_log_stack.push(log);}
 void store_log_stack_pop() { store_log_stack.pop();}
 store_log_t store_log_stack_top() {return store_log_stack.top();}
 bool store_log_stack_empty() { return store_log_stack.empty();}
-#ifdef CONFIG_STORE_LOG_HASH
-std::vector<store_log_hash_entry_t> store_log_hash_entries;
-void store_log_hash_reset() { store_log_hash_entries.clear(); }
-void store_log_hash_push(store_log_hash_entry_t log) { store_log_hash_entries.push_back(log); }
-size_t store_log_hash_size() { return store_log_hash_entries.size(); }
-size_t store_log_hash_copy(store_log_hash_entry_t *dest, size_t capacity) {
-  size_t count = std::min(capacity, store_log_hash_entries.size());
-  std::copy_n(store_log_hash_entries.begin(), count, dest);
-  return count;
-}
-
-static uint64_t store_hash_mix(uint64_t value) {
-  value ^= value >> 30;
-  value *= 0xbf58476d1ce4e5b9ull;
-  value ^= value >> 27;
-  value *= 0x94d049bb133111ebull;
-  return value ^ (value >> 31);
-}
-
-static uint64_t store_hash_rotl(uint64_t value, unsigned int shift) {
-  return (value << shift) | (value >> (64 - shift));
-}
-
-void store_log_hash(uint64_t *lo, uint64_t *hi, uint64_t *count) {
-  const uint64_t entry_count = store_log_hash_entries.size();
-  uint64_t hash_lo = 0x243f6a8885a308d3ull;
-  uint64_t hash_hi = 0x13198a2e03707344ull;
-  for (size_t index = 0; index < store_log_hash_entries.size(); ++index) {
-    const auto &entry = store_log_hash_entries[index];
-    const uint64_t words[] = {entry.addr, entry.data, entry.mask, entry.orig_data};
-    for (size_t field = 0; field < sizeof(words) / sizeof(words[0]); ++field) {
-      const uint64_t tag = 0x9e3779b97f4a7c15ull * (index * 4 + field + 1);
-      const uint64_t value = words[field] ^ tag;
-      hash_lo = store_hash_rotl(hash_lo ^ store_hash_mix(value + 0x6a09e667f3bcc909ull), 29);
-      hash_lo = hash_lo * 0x100000001b3ull + 0x3c6ef372fe94f82bull;
-      hash_hi = store_hash_rotl(hash_hi + store_hash_mix(value ^ 0xbb67ae8584caa73bull), 31);
-      hash_hi = hash_hi * 0x9e3779b185ebca87ull + 0xa54ff53a5f1d36f1ull;
-    }
-  }
-  hash_lo ^= store_hash_mix(entry_count + 0x510e527fade682d1ull);
-  hash_hi ^= store_hash_mix(entry_count ^ 0x1f83d9abfb41bd6bull);
-  *lo = hash_lo;
-  *hi = hash_hi;
-  *count = entry_count;
-}
-#endif // CONFIG_STORE_LOG_HASH
 #ifdef CONFIG_LIGHTQS
 std::stack<store_log_t> spec_store_log_stack;
 void spec_store_log_stack_reset() { spec_store_log_stack = {};}

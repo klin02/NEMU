@@ -20,6 +20,7 @@
 #include <memory/paddr.h>
 #include <memory/host.h>
 #include <memory/store_queue_wrapper.h>
+#include <memory/store_log_hash.h>
 #include <cpu/cpu.h>
 #include <difftest.h>
 
@@ -441,6 +442,8 @@ void difftest_runahead_init() {
 }
 
 void difftest_init() {
+  IFDEF(CONFIG_STORE_LOG_HASH, store_log_hash_reset());
+  IFDEF(CONFIG_STORE_LOG_HASH, store_log_hash_set_enabled(true));
 #ifdef CONFIG_SHARE_OUTPUT_LOG_TO_FILE
   char log_file_name[20];
   sprintf(log_file_name, "nemu-hart-%d.log", ref_hartid);
@@ -583,4 +586,24 @@ void difftest_state_hash(void *dest) {
   hash->store_hi = 0;
   hash->store_count = 0;
 #endif
+}
+
+uint32_t difftest_store_hash_version(void) {
+  return MUXDEF(CONFIG_STORE_LOG_HASH, DIFFTEST_STORE_HASH_VERSION, 0);
+}
+
+bool difftest_store_hash_enabled(void) {
+  return MUXDEF(CONFIG_STORE_LOG_HASH, store_log_hash_enabled(), false);
+}
+
+void difftest_set_store_hash(bool enabled) {
+#ifdef CONFIG_STORE_LOG_HASH
+  store_log_hash_set_enabled(enabled);
+#else
+  assert(!enabled);
+#endif
+}
+
+void difftest_store_hash_reset(void) {
+  IFDEF(CONFIG_STORE_LOG_HASH, store_log_hash_reset());
 }

@@ -90,8 +90,11 @@ void set_pmem(bool pass_pmem_from_dut, uint8_t *_pmem);
 #endif
 
 
-#ifdef CONFIG_STORE_LOG
+#if defined(CONFIG_STORE_LOG) || defined(CONFIG_STORE_LOG_HASH)
 void pmem_record_store_effect(paddr_t addr, int len, word_t data);
+#endif
+
+#ifdef CONFIG_STORE_LOG
 typedef struct {
 #ifdef CONFIG_LIGHTQS
   uint64_t inst_cnt;
@@ -101,14 +104,6 @@ typedef struct {
   // new value and write length makes no sense for restore
 } store_log_t;
 
-#ifdef CONFIG_STORE_LOG_HASH
-typedef struct {
-  uint64_t addr;
-  uint64_t data;
-  uint64_t mask;
-  uint64_t orig_data;
-} store_log_hash_entry_t;
-#endif
 #endif // CONFIG_STORE_LOG
 
 #ifdef CONFIG_DIFFTEST_STORE_COMMIT
