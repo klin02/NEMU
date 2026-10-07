@@ -71,11 +71,13 @@ events must still be applied at their exact positions.
 - `PERF_OPT` selects the original standalone optimized interpreter.
 - `PERF_OPT_SHARE` selects the optimized shared REF interpreter. It supports
   both FAST and SLOW and requires exact per-instruction counting.
-- `PERF_OPT_CORE` is hidden and selects their common interpreter backend.
 - `STORE_LOG` enables rollback support; the existing runtime
   `enable_store_log` flag controls retaining old memory values.
 - `STORE_LOG_HASH` independently enables an ordered scalar RAM-write digest.
   It does not require STORE_LOG or runtime rollback logging.
+
+The common interpreter is compiled when either performance option is enabled.
+There is no separate backend configuration.
 
 FAST mode and STORE_LOG_HASH exclude LightQS and RV_AME configurations;
 PERF_OPT_SHARE excludes LightQS and shared controller builds. Unsupported

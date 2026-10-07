@@ -556,11 +556,7 @@ config PERF_OPT_SHARE
     Use the optimized interpreter with precise instruction boundaries and
     shared-reference state synchronization. Both FAST and SLOW are supported.
 
-config PERF_OPT_CORE
-  bool
-  default y if PERF_OPT || PERF_OPT_SHARE
-
-if PERF_OPT_CORE
+if PERF_OPT || PERF_OPT_SHARE
 config TCACHE_SIZE
   int "Number of entries in trace cache"
   default 8192
@@ -579,7 +575,7 @@ choice
   prompt "Instruction counting accuracy"
   default INSTR_CNT_BY_INSTR_PERF_OPT if PERF_OPT_SHARE
   default INSTR_CNT_BY_BB if PERF_OPT
-  default INSTR_CNT_BY_INSTR_NORMAL if !PERF_OPT_CORE
+  default INSTR_CNT_BY_INSTR_NORMAL if !PERF_OPT && !PERF_OPT_SHARE
 
 config INSTR_CNT_DISABLED
   bool "Disabled"
@@ -591,12 +587,12 @@ config INSTR_CNT_BY_BB
 
 config INSTR_CNT_BY_INSTR_PERF_OPT
   bool "By Instruction"
-  depends on PERF_OPT_CORE
+  depends on PERF_OPT || PERF_OPT_SHARE
   select INSTR_CNT_BY_INSTR
 
 config INSTR_CNT_BY_INSTR_NORMAL
   bool "By Instruction"
-  depends on !PERF_OPT_CORE
+  depends on !PERF_OPT && !PERF_OPT_SHARE
   select INSTR_CNT_BY_INSTR
 
 endchoice

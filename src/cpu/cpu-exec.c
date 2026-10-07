@@ -93,7 +93,11 @@ static inline void debug_hook(vaddr_t pc, const char *asmbuf) {
 #endif
 
 
-void save_globals(Decode *s) { IFDEF(CONFIG_PERF_OPT_CORE, prev_s = s); }
+void save_globals(Decode *s) {
+#if defined(CONFIG_PERF_OPT) || defined(CONFIG_PERF_OPT_SHARE)
+  prev_s = s;
+#endif
+}
 
 // Get the number of executed instructions:
 // Two function is provided: get_abs_instr_count() and get_abs_instr_count_csr()
@@ -254,7 +258,7 @@ _Noreturn void longjmp_exception(int ex_cause) {
   }
 }
 
-#ifdef CONFIG_PERF_OPT_CORE
+#if defined(CONFIG_PERF_OPT) || defined(CONFIG_PERF_OPT_SHARE)
 static bool manual_cpt_quit = false;
 #define FILL_EXEC_TABLE(name) [concat(EXEC_ID_, name)] = &&concat(exec_, name),
 
@@ -587,7 +591,7 @@ end_of_loop:
   debug_difftest(this_s, s, trace_enabled);
   save_globals(s);
 }
-#else // CONFIG_PERF_OPT_CORE
+#else // CONFIG_PERF_OPT || CONFIG_PERF_OPT_SHARE
 #define FILL_EXEC_TABLE(name) [concat(EXEC_ID_, name)] = concat(exec_, name),
 
 #define rtl_priv_next(s)
@@ -838,7 +842,7 @@ static void execute(int n) {
   }
   Loge("total insts: %'lu, execute remain: %'d", get_abs_instr_count(), n_remain);
 }
-#endif // CONFIG_PERF_OPT_CORE
+#endif // CONFIG_PERF_OPT || CONFIG_PERF_OPT_SHARE
 
 IFDEF(CONFIG_DEBUG, char log_bytebuf[80] = {};)
 // max size is (strlen(str(instr)) + strlen(suffix_char(id_dest->width)) + sizeof(id_dest->str) + sizeof(id_src2->str) + sizeof(id_src1->str))
@@ -869,7 +873,7 @@ void fetch_decode(Decode *s, vaddr_t pc) {
   s->EHelper = g_exec_table[idx];
 }
 
-#ifdef CONFIG_PERF_OPT_CORE
+#if defined(CONFIG_PERF_OPT) || defined(CONFIG_PERF_OPT_SHARE)
 static void update_global(int cause) {
   (void)cause;
 #ifdef CONFIG_PERF_OPT_SHARE
@@ -925,7 +929,9 @@ void cpu_exec(uint64_t n) {
     // settle instruction counting, as BATCH has ended.
     update_instr_cnt();
 
-    IFDEF(CONFIG_PERF_OPT_CORE, update_global(cause));
+#if defined(CONFIG_PERF_OPT) || defined(CONFIG_PERF_OPT_SHARE)
+    update_global(cause);
+#endif
 
     Loge("Longjmp happened. total insts: %'lu, cpu_exec remain: %'li", get_abs_instr_count(), n_remain_total);
   }
@@ -975,7 +981,7 @@ void cpu_exec(uint64_t n) {
 
       // No need to settle instruction counting here, as it is done in longjmp handler.
       // It's necessary to flush tcache for exception: addr space may conflict in different priv/mmu mode.
-      #ifdef CONFIG_PERF_OPT_CORE
+      #if defined(CONFIG_PERF_OPT) || defined(CONFIG_PERF_OPT_SHARE)
         tcache_handle_flush(cpu.pc);
       #else
         tcache_handle_flush();
@@ -1008,7 +1014,7 @@ void cpu_exec(uint64_t n) {
         // No need to update_instr_count(). This is not the end of BATCH.
 
         // It's necessary to flush tcache for interrupt: addr space may conflict in different priv/mmu mode.
-        #ifdef CONFIG_PERF_OPT_CORE
+        #if defined(CONFIG_PERF_OPT) || defined(CONFIG_PERF_OPT_SHARE)
           tcache_handle_flush(cpu.pc);
           #else
           tcache_handle_flush();
@@ -1025,7 +1031,9 @@ void cpu_exec(uint64_t n) {
     // settle instruction counting, as BATCH has ended.
     update_instr_cnt_after_execute(fast);
 
-    IFDEF(CONFIG_PERF_OPT_CORE, update_global(0));
+#if defined(CONFIG_PERF_OPT) || defined(CONFIG_PERF_OPT_SHARE)
+    update_global(0);
+#endif
 
     Loge("total insts: %'lu, cpu_exec remain: %'li", get_abs_instr_count(), n_remain_total);
   }

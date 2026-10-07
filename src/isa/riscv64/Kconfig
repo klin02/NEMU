@@ -745,7 +745,7 @@ config MIMPID_VALUE
 config PMPTABLE_EXTENSION
   # PMPTable covers PMPChecker function,
   # close PMPChecker when using PMPTable.
-  depends on !PERF_OPT_CORE
+  depends on !PERF_OPT && !PERF_OPT_SHARE
   depends on !RV_PMP_CHECK
   depends on RV_PMP_CSR
   bool "Enable PMPTable extension"
