@@ -159,18 +159,16 @@ static void update_instr_cnt() {
 #endif // CONFIG_ENABLE_INSTR_CNT
 }
 
-static inline void update_instr_cnt_after_execute(bool fast) {
+static inline void update_instr_cnt_after_execute(void) {
 #if defined(CONFIG_SHARE) && !defined(CONFIG_LIGHTQS) && \
     defined(CONFIG_INSTR_CNT_BY_INSTR)
-  if (!fast) {
+  if (!ref_is_fast()) {
     // The single-step shared path has no generic batch delta left to settle.
     n_batch = 0;
     n_remain = 0;
     n_remain_total = 0;
     return;
   }
-#else
-  (void)fast;
 #endif
   update_instr_cnt();
 }
@@ -874,10 +872,14 @@ void fetch_decode(Decode *s, vaddr_t pc) {
 }
 
 #if defined(CONFIG_PERF_OPT) || defined(CONFIG_PERF_OPT_SHARE)
-static void update_global(int cause) {
-  (void)cause;
+// Publish the interpreter PC after a batch or nonlocal exit.
+// On normal return, prev_s is the next instruction; on EXCEPTION/AGAIN it
+// identifies the faulting/restarted instruction. A shared END already has
+// its boundary PC and must not replace it with the terminating instruction.
+static void update_global(int exit_reason) {
+  (void)exit_reason;
 #ifdef CONFIG_PERF_OPT_SHARE
-  if (cause == NEMU_EXEC_END) return;
+  if (exit_reason == NEMU_EXEC_END) return;
 #endif
   cpu.pc = prev_s->pc;
 }
@@ -886,11 +888,12 @@ static void update_global(int cause) {
 /* Simulate how the CPU works. */
 void cpu_exec(uint64_t n) {
   // The caller selects the mode between execution requests, never mid-call.
-  const bool fast = ref_is_fast();
   // execute() uses a signed int counter; larger requests span internal batches.
-  const uint64_t batch_limit = fast ? (uint64_t)INT_MAX : BATCH_SIZE;
+  // FAST avoids the standalone 64K device/timer polling cadence. Shared
+  // callers must still split requests at their exact architectural events.
+  const uint64_t batch_limit = ref_is_fast() ? (uint64_t)INT_MAX : BATCH_SIZE;
   #if !defined(CONFIG_LIGHTQS) && defined(CONFIG_SHARE)
-    assert(fast || n <= 1);
+    assert(ref_is_fast() || n <= 1);
   #endif
   g_print_step = ISNDEF(CONFIG_SHARE) && (n < MAX_INSTR_TO_PRINT);
   switch (nemu_state.state) {
@@ -1029,10 +1032,10 @@ void cpu_exec(uint64_t n) {
     execute(n_batch);
 
     // settle instruction counting, as BATCH has ended.
-    update_instr_cnt_after_execute(fast);
+    update_instr_cnt_after_execute();
 
 #if defined(CONFIG_PERF_OPT) || defined(CONFIG_PERF_OPT_SHARE)
-    update_global(0);
+    update_global(NEMU_EXEC_RUNNING);
 #endif
 
     Loge("total insts: %'lu, cpu_exec remain: %'li", get_abs_instr_count(), n_remain_total);

@@ -818,8 +818,6 @@ void store_commit_queue_push(uint64_t addr, uint64_t data, int len,
       .mask = records[i].mask,
       .pc = prev_s->pc
     };
-    ref_log_cpu("store record addr:" FMT_PADDR ", data:%016lx, mask:%02x",
-                commit.addr, commit.data, commit.mask);
     store_queue_push(commit);
   }
 }

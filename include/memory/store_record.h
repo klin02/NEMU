@@ -17,6 +17,7 @@ typedef struct {
   uint8_t mask;
 } store_record_t;
 
+// Normalization only: records live on the caller stack, not in a retained log.
 // A scalar write touches at most two aligned 8-byte records. Masked-off data
 // bytes are zero, matching the committed-store queue and store-hash protocol.
 static inline unsigned store_record_split(uint64_t addr, uint64_t data, int len,

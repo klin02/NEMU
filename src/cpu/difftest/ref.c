@@ -21,6 +21,7 @@
 #include <memory/host.h>
 #include <memory/store_queue_wrapper.h>
 #include <memory/store_log_hash.h>
+#include <utils/hash.h>
 #include <cpu/cpu.h>
 #include <difftest.h>
 
@@ -551,34 +552,9 @@ void difftest_flush_state(void) {
   mmu_tlb_flush(0);
 }
 
-static uint64_t state_hash_mix(uint64_t value) {
-  value ^= value >> 30;
-  value *= 0xbf58476d1ce4e5b9ull;
-  value ^= value >> 27;
-  value *= 0x94d049bb133111ebull;
-  return value ^ (value >> 31);
-}
-
-static uint64_t state_hash_rotl(uint64_t value, unsigned int shift) {
-  return (value << shift) | (value >> (64 - shift));
-}
-
-static void state_hash_bytes(uint64_t *lo, uint64_t *hi, const void *data, size_t size) {
-  const uint8_t *bytes = (const uint8_t *)data;
-  for (size_t index = 0; index < size; ++index) {
-    const uint64_t value = bytes[index] ^ (0x9e3779b97f4a7c15ull * (index + 1));
-    *lo = state_hash_rotl(*lo ^ state_hash_mix(value + 0x6a09e667f3bcc909ull), 29);
-    *lo = *lo * 0x100000001b3ull + 0x3c6ef372fe94f82bull;
-    *hi = state_hash_rotl(*hi + state_hash_mix(value ^ 0xbb67ae8584caa73bull), 31);
-    *hi = *hi * 0x9e3779b185ebca87ull + 0xa54ff53a5f1d36f1ull;
-  }
-}
-
 void difftest_state_hash(void *dest) {
   difftest_state_hash_t *hash = (difftest_state_hash_t *)dest;
-  hash->state_lo = 0x243f6a8885a308d3ull;
-  hash->state_hi = 0x13198a2e03707344ull;
-  state_hash_bytes(&hash->state_lo, &hash->state_hi, &cpu, DIFFTEST_REG_SIZE);
+  difftest_hash_bytes(&hash->state_lo, &hash->state_hi, &cpu, DIFFTEST_REG_SIZE);
 #ifdef CONFIG_STORE_LOG_HASH
   store_log_hash(&hash->store_lo, &hash->store_hi, &hash->store_count);
 #else

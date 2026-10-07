@@ -11,6 +11,8 @@
 
 #include <utils.h>
 
+// Runtime collection and constant-size boundary digest; record normalization
+// is independent in store_record.h. STORE_LOG separately enables rollback.
 #ifdef CONFIG_STORE_LOG_HASH
 void store_log_hash_reset(void);
 void store_log_hash_set_enabled(bool enabled);
