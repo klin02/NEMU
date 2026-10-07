@@ -132,11 +132,11 @@ The skip helpers retain their existing integer-register writeback interface.
 
 ## Implementation boundaries
 
-`memory/store_record.h` normalizes a scalar physical write into aligned
-8-byte address/data/mask records. They are temporary stack values shared
-by committed-store queue insertion and incremental digest updates, not a
-second retained log. `memory/store_log_hash.h` declares the runtime rolling
-digest controls and the optional rollback checkpoint.
+`memory/store_log_hash.h` contains scalar-write normalization and the rolling
+digest interfaces, including the optional rollback checkpoint. Normalized
+8-byte address/data/mask records are temporary stack values shared by the
+committed-store queue and incremental digest updates, not a second retained
+log. Record normalization remains available when STORE_LOG_HASH is disabled.
 
 State and store digests share seed initialization, rotation and SplitMix64
 finalization in `utils/hash.h`. `difftest_hash_bytes()` handles a state byte

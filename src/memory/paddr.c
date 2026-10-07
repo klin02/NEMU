@@ -23,7 +23,6 @@
 #include <memory/paddr.h>
 #include <memory/store_queue_wrapper.h>
 #include <memory/store_log_hash.h>
-#include <memory/store_record.h>
 #ifdef CONFIG_AME_MEM_ACCESS_CHECK
 #include <ame/svstore_queue_wrapper.h>
 #endif // CONFIG_AME_MEM_ACCESS_CHECK
