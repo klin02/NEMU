@@ -205,12 +205,12 @@ bool difftest_raise_critical_error() {
 
 void difftest_exec(uint64_t n) {
   // FAST advances continuously; state copies remain explicit caller requests.
-  if (ref_is_fast() || n <= 1) {
+  if (!ref_fast_supported() || ref_is_fast() || n <= 1) {
     cpu_exec(n);
     return;
   }
 
-  // Preserve the existing single-step execution path for SLOW and other REFs.
+  // Supported SLOW references retain their existing single-step path.
   while (n-- != 0) cpu_exec(1);
 }
 

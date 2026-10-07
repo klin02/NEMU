@@ -342,11 +342,9 @@ static inline Decode *jr_fetch(Decode *s, vaddr_t target) {
   return tcache_jr_fetch(s, target);
 }
 
-static inline void debug_difftest(Decode *_this, Decode *next, bool trace_enabled) {
+static inline void debug_difftest(Decode *_this, Decode *next) {
 #ifdef CONFIG_PERF_OPT_SHARE
-  if (trace_enabled) {
-    ref_log_cpu("pc = 0x%lx inst %x", _this->pc, _this->isa.instr.val);
-  }
+  ref_log_cpu("pc = 0x%lx inst %x", _this->pc, _this->isa.instr.val);
 #endif
   IFDEF(CONFIG_IQUEUE, iqueue_commit(_this->pc, (void *)&_this->isa.instr.val,
                                      _this->snpc - _this->pc));
@@ -429,7 +427,6 @@ uint64_t per_bb_profile(Decode *prev_s, Decode *s) {
 
 static void execute(int n) {
   Logtb("execute() Will execute %i instrs\n", n);
-  const bool trace_enabled = MUXDEF(CONFIG_PERF_OPT_SHARE, dynamic_config.debug_difftest, false);
   n_remain = n;
   // Note: n_remain in PERF_OPT execute may be less than 0, as it is only computed at end of basic block.
   // Note: n is no longer used below, use n_remain instead.
@@ -553,7 +550,7 @@ static void execute(int n) {
     IFDEF(CONFIG_INSTR_CNT_BY_INSTR, n_remain -= 1);
 
     save_globals(s);
-    debug_difftest(this_s, s, trace_enabled);
+    debug_difftest(this_s, s);
 #if defined(CONFIG_PERF_OPT_SHARE) && defined(CONFIG_INSTR_CNT_BY_INSTR)
     if (unlikely(n_remain <= 0)) return;
 #endif
@@ -586,7 +583,7 @@ end_of_loop:
         unlikely(manual_cpt_quit), manual_cpt_quit);
   }
 
-  debug_difftest(this_s, s, trace_enabled);
+  debug_difftest(this_s, s);
   save_globals(s);
 }
 #else // CONFIG_PERF_OPT || CONFIG_PERF_OPT_SHARE
@@ -872,15 +869,8 @@ void fetch_decode(Decode *s, vaddr_t pc) {
 }
 
 #if defined(CONFIG_PERF_OPT) || defined(CONFIG_PERF_OPT_SHARE)
-// Publish the interpreter PC after a batch or nonlocal exit.
-// On normal return, prev_s is the next instruction; on EXCEPTION/AGAIN it
-// identifies the faulting/restarted instruction. A shared END already has
-// its boundary PC and must not replace it with the terminating instruction.
-static void update_global(int exit_reason) {
-  (void)exit_reason;
-#ifdef CONFIG_PERF_OPT_SHARE
-  if (exit_reason == NEMU_EXEC_END) return;
-#endif
+// Publish the interpreter position after a batch or nonlocal exit.
+static void update_global(void) {
   cpu.pc = prev_s->pc;
 }
 #endif
@@ -933,7 +923,10 @@ void cpu_exec(uint64_t n) {
     update_instr_cnt();
 
 #if defined(CONFIG_PERF_OPT) || defined(CONFIG_PERF_OPT_SHARE)
-    update_global(cause);
+    // Shared END already published the terminal boundary; do not rewind it.
+    if (ISNDEF(CONFIG_PERF_OPT_SHARE) || cause != NEMU_EXEC_END) {
+      update_global();
+    }
 #endif
 
     Loge("Longjmp happened. total insts: %'lu, cpu_exec remain: %'li", get_abs_instr_count(), n_remain_total);
@@ -1035,7 +1028,7 @@ void cpu_exec(uint64_t n) {
     update_instr_cnt_after_execute();
 
 #if defined(CONFIG_PERF_OPT) || defined(CONFIG_PERF_OPT_SHARE)
-    update_global(NEMU_EXEC_RUNNING);
+    update_global();
 #endif
 
     Loge("total insts: %'lu, cpu_exec remain: %'li", get_abs_instr_count(), n_remain_total);

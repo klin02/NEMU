@@ -21,8 +21,9 @@ disabled for shared execution. The separate FAST S/U translation cache is
 not included here. Standalone configuration defaults are unchanged.
 
 The default runtime mode is SLOW. Select FAST explicitly with
-`difftest_set_exec_mode(DIFFTEST_EXEC_FAST)`. SLOW splits multi-instruction
-requests into existing one-instruction calls. FAST executes in batches,
+`difftest_set_exec_mode(DIFFTEST_EXEC_FAST)`. Supported SLOW references split multi-instruction
+requests into existing one-instruction calls. Other configurations retain
+their original cpu_exec(n) path. FAST executes in batches,
 suppresses committed-store queue recording and bypasses PMP/PMA permission
 checks, including those used during page-table walks. PMP/PMA checks remain
 compiled according to the existing configuration and resume in SLOW.
@@ -146,10 +147,10 @@ The state low-lane salt is an odd variant of SHA-512 H[0], not the exact
 SHA-512 constant. The resulting hashes are custom compositions. This cleanup
 preserves all digest values and the store-hash protocol version.
 
-`update_global(exit_reason)` publishes the interpreter PC after normal
-return, an exception, or a trace-cache retry. These reasons are internal
-NEMU_EXEC_* control-flow values, distinct from architectural exception causes.
-Shared NEMU_EXEC_END preserves its already published terminal PC.
+`update_global()` only publishes the interpreter PC. Its caller skips this
+synchronization for shared NEMU_EXEC_END, preserving the already advanced
+terminal PC. Other internal longjmp reasons follow the normal synchronization
+path; they are distinct from architectural exception causes.
 
 INT_MAX limits FAST internal batches because the interpreter budget is an
 int. Standalone retains the original 65,536-instruction device/timer polling
@@ -157,7 +158,8 @@ batches; ordinary shared SLOW executes one instruction at a time. A larger
 FAST limit only reduces intermediate batch work for large requests; callers
 still split at events, and no benefit is implied for requests below 65,536.
 
-Existing REF instruction/memory logs remain gated by debug_difftest. The
+Existing REF instruction/memory logs remain gated directly by debug_difftest,
+without a second cached flag or a logging-helper argument. The
 duplicate normalized-record REF print is removed; the existing memory trace
 and store-queue diagnostics remain available.
 

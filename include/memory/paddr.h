@@ -103,7 +103,6 @@ typedef struct {
   word_t orig_data;
   // new value and write length makes no sense for restore
 } store_log_t;
-
 #endif // CONFIG_STORE_LOG
 
 #ifdef CONFIG_DIFFTEST_STORE_COMMIT

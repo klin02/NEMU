@@ -570,11 +570,12 @@ void pmem_record_restore(uint64_t restore_inst_cnt) {
 #else
 void pmem_record_store(paddr_t addr) {
   if (dynamic_config.enable_store_log) {
+    addr &= ~0x7ull;
     // The first logged write marks the digest origin of this replay interval.
     IFDEF(CONFIG_STORE_LOG_HASH, if (store_log_stack_empty()) store_log_hash_checkpoint());
     store_log_t rollback = {
-      .addr = addr & ~0x7ull,
-      .orig_data = pmem_read(addr & ~0x7ull, 8)
+      .addr = addr,
+      .orig_data = pmem_read(addr, 8)
     };
     store_log_stack_push(rollback);
   }
