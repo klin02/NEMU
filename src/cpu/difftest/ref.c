@@ -17,6 +17,7 @@
 #include <isa.h>
 #include <cpu/difftest/ame/amuctrl.h>
 #include <cpu/difftest/ame/msync.h>
+#include <memory/cmo_write_watch.h>
 #include <memory/paddr.h>
 #include <memory/host-tlb.h>
 #include <memory/host.h>
@@ -445,6 +446,7 @@ void difftest_runahead_init() {
 }
 
 void difftest_init() {
+  IFDEF(CMO_WRITE_WATCH, cmo_write_watch_reset());
   IFDEF(CONFIG_STORE_LOG_HASH, store_log_hash_reset());
   IFDEF(CONFIG_STORE_LOG_HASH, store_log_hash_set_enabled(true));
 #ifdef CONFIG_SHARE_OUTPUT_LOG_TO_FILE
