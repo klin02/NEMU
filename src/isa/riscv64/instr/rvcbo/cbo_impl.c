@@ -19,6 +19,7 @@
 #include <common.h>
 #include <rtl/rtl.h>
 #include <device/mmio.h>
+#include <memory/cmo_write_watch.h>
 #include <cpu/decode.h>
 #include <cpu/difftest.h>
 #include <cpu/cpu.h>
@@ -129,7 +130,7 @@ void cbo_inval(Decode *s){
     }
 #endif
 
-    // do nothing
+    IFDEF(CMO_WRITE_WATCH, cmo_write_watch_invalidate(*addr_p & ~CACHE_BLOCK_MASK));
     IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));
     pop_context();
   }
@@ -203,7 +204,7 @@ void cbo_inval_mmu(Decode *s){
       svstore_queue_update_cbo(paddr & ~CACHE_BLOCK_MASK, CACHE_BLOCK_SIZE);
     }
 #endif
-
+    IFDEF(CMO_WRITE_WATCH, cmo_write_watch_invalidate(paddr & ~CACHE_BLOCK_MASK));
     IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));
     pop_context();
   }
