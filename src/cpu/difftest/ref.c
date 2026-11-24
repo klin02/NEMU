@@ -446,7 +446,9 @@ void difftest_runahead_init() {
 }
 
 void difftest_init() {
-  IFDEF(CMO_WRITE_WATCH, cmo_write_watch_reset());
+#ifdef CMO_WRITE_WATCH
+  cmo_write_watch_reset();
+#endif
   IFDEF(CONFIG_STORE_LOG_HASH, store_log_hash_reset());
   IFDEF(CONFIG_STORE_LOG_HASH, store_log_hash_set_enabled(true));
 #ifdef CONFIG_SHARE_OUTPUT_LOG_TO_FILE
