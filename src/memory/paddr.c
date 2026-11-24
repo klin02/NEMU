@@ -20,6 +20,7 @@
 #include <isa.h>
 #include <macro.h>
 #include <memory/host.h>
+#include <memory/cmo_write_watch.h>
 #include <memory/paddr.h>
 #include <memory/store_queue_wrapper.h>
 #include <memory/store_log_hash.h>
@@ -718,6 +719,11 @@ void paddr_write(paddr_t addr, int len, word_t data, int mode, vaddr_t vaddr) {
   }
 
   if (likely(in_pmem(addr))) {
+#ifdef CMO_WRITE_WATCH
+    if (unlikely(cmo_write_watch_active)) {
+      cmo_write_watch_record(addr, len);
+    }
+#endif
 #ifdef CONFIG_SHARE
 #if defined(CONFIG_STORE_LOG) || defined(CONFIG_STORE_LOG_HASH)
     pmem_record_store_effect(addr, len, data);
